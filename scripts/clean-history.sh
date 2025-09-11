@@ -79,16 +79,18 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 log "Creating temporary branch $TEMP_BRANCH"
 git checkout -b "$TEMP_BRANCH"
 
-# Find the first commit before our target date
-FIRST_COMMIT=$(git log --before="$START_TIME" -n 1 --format="%H")
-if [ -z "$FIRST_COMMIT" ]; then
-  die "No commits found before $TARGET_DATE"
-fi
+# Get all commits we want to remove
+COMMITS_TO_REMOVE=$(git log --after="$START_TIME" --before="$END_TIME" --format="%H")
 
-# Use interactive rebase to drop the commits
+# Create a filter-branch command that will skip commits from our target date
 log "Removing commits..."
-git rebase -i "$FIRST_COMMIT" --exec \
-  "if [[ \$(git show -s --format=%aI HEAD) =~ ^${TARGET_DATE} ]]; then git reset --hard HEAD~; fi"
+git filter-branch -f --commit-filter '
+  commit_date=$(git show -s --format=%aI "$GIT_COMMIT")
+  if [[ "$commit_date" =~ ^"$TARGET_DATE" ]]; then
+    skip_commit "$@";
+  else
+    git commit-tree "$@";
+  fi' HEAD
 
 # Switch back to original branch and force-update it
 log "Updating $CURRENT_BRANCH"
