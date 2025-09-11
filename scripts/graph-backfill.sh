@@ -179,6 +179,11 @@ make_commit_at() {
     git commit -m "$msg"
 }
 
+remove_seed_file() {
+  git rm -f "$SEED_FILE"
+
+}
+
 # Batching helpers
 current_branch_name() { git rev-parse --abbrev-ref HEAD; }
 
@@ -301,8 +306,12 @@ while :; do
       checkpoint_if_needed
     done
   fi
+  remove_seed_file
   current_day=$(date_add_days "$current_day" 1)
 done
+
+
+
 
 log "Done."
 
