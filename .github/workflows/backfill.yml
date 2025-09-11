@@ -58,10 +58,10 @@ jobs:
           else
             END=$(date -u -d 'yesterday' +%F)
           fi
-          ./scripts/graph-backfill.sh \
-            --start "$START" --end "$END" \
-            --min "$MIN" --max "$MAX" \
-            --author-name "$AUTHOR_NAME" --author-email "$AUTHOR_EMAIL"
+          ARGS=("./scripts/graph-backfill.sh" --start "$START" --end "$END" --min "$MIN" --max "$MAX")
+          [ -n "$AUTHOR_NAME" ] && ARGS+=(--author-name "$AUTHOR_NAME")
+          [ -n "$AUTHOR_EMAIL" ] && ARGS+=(--author-email "$AUTHOR_EMAIL")
+          bash "${ARGS[@]}"
           AFTER=$(git rev-parse HEAD)
           echo "before=$BEFORE" >> $GITHUB_OUTPUT
           echo "after=$AFTER" >> $GITHUB_OUTPUT
