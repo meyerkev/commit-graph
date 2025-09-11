@@ -168,6 +168,25 @@ ensure_seed_file() {
   [ -f "$SEED_FILE" ] || echo "# seed" > "$SEED_FILE"
 }
 
+# Generate a random timestamp within a given day
+get_random_timestamp() {
+  local day=$1
+  local base_epoch offset ts_epoch
+  base_epoch=$(epoch_utc_at_midnight "$day")
+  offset=$(rand_inclusive 0 86399)
+  ts_epoch=$(( base_epoch + offset ))
+  fmt_iso_utc_from_epoch "$ts_epoch"
+}
+
+# Make a commit with a random timestamp within the current day
+make_timestamped_commit() {
+  local day=$1 msg=$2
+  local ts_iso
+  ts_iso=$(get_random_timestamp "$day")
+  make_commit_at "$ts_iso" "$msg"
+}
+
+# Make a commit at a specific timestamp
 make_commit_at() {
   local ts_iso=$1 msg=$2
   if [ "$DRY_RUN" -eq 1 ]; then
@@ -211,7 +230,7 @@ remove_seed_file() {
   
   # Only commit if we actually removed something
   if [ "$has_changes" -eq 1 ]; then
-    git commit -m "chore(cleanup): remove graph seed files"  || true
+    make_timestamped_commit "$current_day" "chore(cleanup): remove graph seed files" || true
     log "Successfully removed and committed seed files"
   fi
   ensure_seed_file
@@ -325,22 +344,17 @@ current_day="$START_DATE"
 while :; do
   ensure_seed_file
   [ "$current_day" \> "$END_DATE" ] && break
-  existing=$(count_commits_for_day "$current_day") || existing=0
   target=$(rand_inclusive "$MIN_COMMITS" "$MAX_COMMITS")
-  need=$(( target - existing ))
+  need=$target
   if [ "$need" -le 0 ]; then
     log "$current_day: existing=$existing >= target=$target — skip"
   else
     log "$current_day: existing=$existing, target=$target, need=$need"
     base_epoch=$(epoch_utc_at_midnight "$current_day")
     for i in $(seq 1 "$need"); do
-      offset=$(rand_inclusive 0 86399)
-      ts_epoch=$(( base_epoch + offset ))
-      ts_iso=$(fmt_iso_utc_from_epoch "$ts_epoch")
-      make_commit_at "$ts_iso" "chore(graph): seed $current_day (#$i/$need)"
-      MADE_TOTAL=$(( MADE_TOTAL + 1 ))
-      checkpoint_if_needed
+      make_timestamped_commit "$current_day" "chore(graph): seed $current_day (#$i/$need)"
     done
+    
   fi
   remove_seed_file
   current_day=$(date_add_days "$current_day" 1)
@@ -353,6 +367,7 @@ if [ -f "$SEED_FILE" ] || ([ -d "$SEED_DIR" ] && [ -n "$(ls -A "$SEED_DIR" 2>/de
   log "Staging seed files for removal"
   git add "$SEED_DIR" "$SEED_FILE" 2>/dev/null || true
   git rm -rf "$SEED_DIR" "$SEED_FILE" 2>/dev/null || true
+  make_timestamped_commit "$current_day" "chore(cleanup): remove graph seed files"
 fi
 
 log "Done."
