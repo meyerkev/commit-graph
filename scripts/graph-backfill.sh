@@ -350,7 +350,8 @@ done
 
 # Final cleanup is handled by the workflow's push step
 # We only need to ensure the seed files are staged for removal
-if [ -d "$SEED_DIR" ] || [ -f "$SEED_FILE" ]; then
+# Only clean up if seed file exists or seed directory has files
+if [ -f "$SEED_FILE" ] || ([ -d "$SEED_DIR" ] && [ -n "$(ls -A "$SEED_DIR" 2>/dev/null)" ]); then
   log "Staging seed files for removal"
   git add "$SEED_DIR" "$SEED_FILE" 2>/dev/null || true
   git rm -rf "$SEED_DIR" "$SEED_FILE" 2>/dev/null || true
