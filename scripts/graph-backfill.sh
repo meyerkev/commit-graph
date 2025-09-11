@@ -356,7 +356,7 @@ while :; do
 done
 
 echo "Cleaning up seed files"
-git rm -rf "$SEED_FILE.d"
+git rm -rf "$SEED_FILE.d" || true
 git commit -a -m "chore(cleanup): remove graph seed files"
 git_push_with_retry "$REMOTE" "$(current_branch_name)" "$(current_branch_name)"
 
