@@ -198,10 +198,18 @@ git_push_with_retry() {
       return 0
     fi
     rc=$?
-    # Try to fetch and merge latest remote before retrying
-    log "WARN: push failed (attempt $attempt/$PUSH_RETRIES); fetching and merging origin/${push_ref} before retry..."
+    if [ "$attempt" -ge "$PUSH_RETRIES" ]; then
+      log "WARN: push failed after $attempt attempts (rc=$rc)"
+      return "$rc"
+    fi
+    # Back off BEFORE fetching/merging so the window between merge and push is minimal
+    log "WARN: push failed (attempt $attempt/$PUSH_RETRIES); backing off ${delay}s before fetch+merge..."
+    sleep "$delay"
+    attempt=$(( attempt + 1 ))
+    delay=$(( delay * 2 ))
+    # Now fetch and merge latest remote and immediately loop to push again
     if ! git fetch "$remote" "$push_ref"; then
-      log "WARN: fetch failed; will back off and retry"
+      log "WARN: fetch failed; will retry push without merge"
     else
       # Prefer keeping our local changes in conflicts (seed file is append-only)
       git config --local merge.renamelimit 999999 || true
@@ -210,14 +218,6 @@ git_push_with_retry() {
         git merge --abort || true
       fi
     fi
-    if [ "$attempt" -ge "$PUSH_RETRIES" ]; then
-      log "WARN: push failed after $attempt attempts (rc=$rc)"
-      return "$rc"
-    fi
-    log "INFO: retrying push in ${delay}s..."
-    sleep "$delay"
-    attempt=$(( attempt + 1 ))
-    delay=$(( delay * 2 ))
   done
 }
 
