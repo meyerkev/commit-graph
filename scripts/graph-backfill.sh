@@ -11,6 +11,7 @@ MAX_COMMITS=100
 AUTHOR_NAME=""
 AUTHOR_EMAIL=""
 SEED_FILE=".graph-seed"
+SEED_DIR=".graph-seed.d"
 DRY_RUN=0
 QUIET=0
 
@@ -202,7 +203,7 @@ remove_seed_file() {
   fi
   
   # Handle directory contents
-  if [ -d "$SEED_FILE.d" ]; then
+  if [ -d "$SEED_DIR" ]; then
     local file
     while IFS= read -r -d '' file; do
       # Skip if we've already removed this file
@@ -356,7 +357,7 @@ while :; do
 done
 
 echo "Cleaning up seed files"
-git rm -rf "$SEED_FILE.d" || true
+git rm -rf "$SEED_DIR" || true
 git commit -a -m "chore(cleanup): remove graph seed files"
 git_push_with_retry "$REMOTE" "$(current_branch_name)" "$(current_branch_name)"
 
