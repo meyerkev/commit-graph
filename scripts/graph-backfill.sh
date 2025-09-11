@@ -21,7 +21,7 @@ BATCH_SIZE=1000      # default: checkpoint every 1000 commits (set 0 to disable)
 ROTATE=0             # default: do not create/switch to new branch at checkpoints
 BRANCH_PREFIX="batch"
 ENABLE_PUSH=0        # require explicit opt-in to push
-PUSH_RETRIES=5       # retry count for git push
+PUSH_RETRIES=100     # retry count for git push
 PUSH_BACKOFF_SEC=2   # initial backoff seconds; doubles each retry
 
 log() { [ "$QUIET" -eq 1 ] && return 0; printf "%s\n" "$*"; }
@@ -59,7 +59,7 @@ Options:
   --rotate                 After pushing at a checkpoint, create and switch to a new branch
   --branch-prefix PREFIX   Prefix for rotated branch names (default: batch)
   --enable-push            Actually run git push at checkpoints (default: print only)
-  --push-retries N         Number of times to retry failed pushes (default: 5)
+  --push-retries N         Number of times to retry failed pushes (default: 100)
   --push-backoff SEC       Initial backoff delay in seconds (default: 2; doubles each retry)
   -h, --help               Show this help
 

@@ -57,6 +57,10 @@ Retry behavior details:
 - After merge (or if fetch/merge fails), it retries with exponential backoff until `--push-retries` is exhausted.
 - The workflow still contains a final safety push; with `--enable-push`, that step is usually a no-op fast-forward.
 
+Defaults:
+- Script retries: 100 attempts, starting backoff 2s (doubles each retry).
+- Workflow safety push: up to 100 attempts with incremental backoff.
+
 ## GitHub Action
 
 - Add repo variables: `GRAPH_AUTHOR_NAME`, `GRAPH_AUTHOR_EMAIL` (must match a verified email).
