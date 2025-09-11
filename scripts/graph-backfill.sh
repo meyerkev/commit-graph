@@ -179,9 +179,21 @@ make_commit_at() {
     git commit -m "$msg"
 }
 
+# Remove the seed file and commit its removal
+# Respects DRY_RUN mode and only removes if file exists
 remove_seed_file() {
-  git rm -f "$SEED_FILE"
-
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "DRY: Would remove $SEED_FILE"
+    log "DRY: Would commit removal"
+    return 0
+  fi
+  
+  if [ -f "$SEED_FILE" ]; then
+    log "Removing $SEED_FILE"
+    git rm -f "$SEED_FILE"
+    git commit -m "chore(cleanup): remove graph seed file"
+    log "Successfully removed and committed $SEED_FILE"
+  fi
 }
 
 # Batching helpers
@@ -246,6 +258,8 @@ checkpoint_if_needed() {
     fi
 
     log "Checkpoint #$BATCH_INDEX: pushing $curr -> $push_ref on $REMOTE"
+    remove_seed_file
+    
     if git_push_with_retry "$REMOTE" "$curr" "$push_ref"; then
       if [ "$ROTATE" -eq 1 ] && [ "$DRY_RUN" -eq 0 ]; then
         log "Rotating branch: $new_branch"
@@ -309,9 +323,6 @@ while :; do
   remove_seed_file
   current_day=$(date_add_days "$current_day" 1)
 done
-
-
-
 
 log "Done."
 
