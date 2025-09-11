@@ -204,19 +204,8 @@ remove_seed_file() {
   
   # Handle directory contents
   if [ -d "$SEED_DIR" ]; then
-    local file
-    while IFS= read -r -d '' file; do
-      # Skip if we've already removed this file
-      [ -n "${REMOVED_FILES[$file]:-}" ] && continue
-      
-      log "Removing $file"
-      git rm -f "$file" || true
-      REMOVED_FILES[$file]=1
-      has_changes=1
-    done < <(find "$SEED_FILE.d" -type f -print0)
-    
-    # Try to remove the directory if it's empty
-    rmdir "$SEED_FILE.d" 2>/dev/null || true
+    git rm -rf "$SEED_DIR" || true
+    has_changes=1
   fi
   
   # Only commit if we actually removed something
