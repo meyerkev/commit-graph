@@ -240,6 +240,24 @@ checkpoint_if_needed() {
   fi
 }
 
+final_checkpoint_if_needed() {
+  # Perform a final push if the last batch did not reach the threshold
+  if [ "$BATCH_SIZE" -gt 0 ] && [ "$MADE_TOTAL" -gt 0 ] && [ $(( MADE_TOTAL % BATCH_SIZE )) -ne 0 ]; then
+    local curr push_ref
+    curr=$(current_branch_name)
+    push_ref=${PUSH_BRANCH:-$curr}
+    if [ "$DRY_RUN" -eq 1 ] || [ "$ENABLE_PUSH" -eq 0 ]; then
+      [ "$ENABLE_PUSH" -eq 1 ] || log "INFO: push disabled. Use --enable-push to actually push."
+      log "DRY: final checkpoint — would push $curr -> $push_ref on $REMOTE"
+    else
+      log "Final checkpoint: pushing $curr -> $push_ref on $REMOTE"
+      if ! git_push_with_retry "$REMOTE" "$curr" "$push_ref"; then
+        log "WARN: final push failed"
+      fi
+    fi
+  fi
+}
+
 log "Backfilling from $START_DATE to $END_DATE (min=$MIN_COMMITS, max=$MAX_COMMITS)"
 ensure_seed_file
 
@@ -276,18 +294,4 @@ done
 
 log "Done."
 
-# Final push for remaining commits under the batch size threshold
-if [ "$BATCH_SIZE" -gt 0 ] && [ "$MADE_TOTAL" -gt 0 ] && [ $(( MADE_TOTAL % BATCH_SIZE )) -ne 0 ]; then
-  local curr push_ref
-  curr=$(current_branch_name)
-  push_ref=${PUSH_BRANCH:-$curr}
-  if [ "$DRY_RUN" -eq 1 ] || [ "$ENABLE_PUSH" -eq 0 ]; then
-    [ "$ENABLE_PUSH" -eq 1 ] || log "INFO: push disabled. Use --enable-push to actually push."
-    log "DRY: final checkpoint — would push $curr -> $push_ref on $REMOTE"
-  else
-    log "Final checkpoint: pushing $curr -> $push_ref on $REMOTE"
-    if ! git_push_with_retry "$REMOTE" "$curr" "$push_ref"; then
-      log "WARN: final push failed"
-    fi
-  fi
-fi
+final_checkpoint_if_needed
