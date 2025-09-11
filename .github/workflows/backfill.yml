@@ -48,16 +48,21 @@ jobs:
           MAX: ${{ inputs.max || vars.GRAPH_MAX || '100' }}
           AUTHOR_NAME: ${{ vars.GRAPH_AUTHOR_NAME || secrets.GRAPH_AUTHOR_NAME }}
           AUTHOR_EMAIL: ${{ vars.GRAPH_AUTHOR_EMAIL || secrets.GRAPH_AUTHOR_EMAIL }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           BEFORE=$(git rev-parse HEAD)
           chmod +x scripts/graph-backfill.sh
           if [ -n "${{ inputs.range_start }}" ]; then
             START='${{ inputs.range_start }}'
+          elif [ "$EVENT_NAME" = "schedule" ]; then
+            START=$(date -u +%F)
           else
             START=$(date -u -d '7 days ago' +%F)
           fi
           if [ -n "${{ inputs.range_end }}" ]; then
             END='${{ inputs.range_end }}'
+          elif [ "$EVENT_NAME" = "schedule" ]; then
+            END=$(date -u +%F)
           else
             END=$(date -u -d 'yesterday' +%F)
           fi
