@@ -91,14 +91,16 @@ jobs:
               echo "Push succeeded"
               break
             fi
-            echo "Push failed; rebasing onto origin/${BASE} and retrying..."
-            # Try to rebase on latest and retry
+            echo "Push failed; merging origin/${BASE} and retrying..."
+            # Merge latest with union/ours to auto-stack .graph-seed appends
             if ! git fetch origin "$BASE"; then
               echo "Fetch failed; will retry after backoff"
             else
-              if ! git pull --rebase origin "$BASE"; then
-                echo "Rebase failed; attempting to abort and retry"
-                git rebase --abort || true
+              # ensure attributes are respected
+              git config --local merge.renamelimit 999999 || true
+              if ! git merge -s recursive -X ours --no-edit "origin/${BASE}"; then
+                echo "Merge failed; attempting to abort and retry"
+                git merge --abort || true
               fi
             fi
             attempt=$((attempt + 1))
