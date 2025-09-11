@@ -1,0 +1,26 @@
+{
+  "name": "commit-graph",
+  "version": "1.0.0",
+  "description": "Make a bunch of commits so my GitHub graph looks good.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meyerkev/commit-graph.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/meyerkev/commit-graph/issues"
+  },
+  "homepage": "https://github.com/meyerkev/commit-graph#readme",
+  "dependencies": {
+    "libsodium-wrappers": "^0.7.15",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-sealed-box": "^1.0.5"
+  }
+}

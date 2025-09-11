@@ -1,0 +1,122 @@
+name: Backfill Graph
+
+on:
+  schedule:
+    - cron: '32 3 * * *'  # daily ~03:32 UTC
+  workflow_dispatch:
+    inputs:
+      range_start:
+        description: "Start date YYYY-MM-DD (optional)"
+        required: false
+        type: string
+      range_end:
+        description: "End date YYYY-MM-DD inclusive (optional)"
+        required: false
+        type: string
+      min:
+        description: "Min commits per day (default 15)"
+        required: false
+        type: string
+      max:
+        description: "Max commits per day (default 100)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Work directly on the default branch
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Configure Git
+        run: |
+          git config user.name "${{ vars.GRAPH_AUTHOR_NAME }}"
+          git config user.email "${{ vars.GRAPH_AUTHOR_EMAIL }}"
+
+      - name: Backfill range or last 7 days
+        env:
+          MIN: ${{ inputs.min || vars.GRAPH_MIN || '15' }}
+          MAX: ${{ inputs.max || vars.GRAPH_MAX || '100' }}
+          AUTHOR_NAME: ${{ vars.GRAPH_AUTHOR_NAME || secrets.GRAPH_AUTHOR_NAME }}
+          AUTHOR_EMAIL: ${{ vars.GRAPH_AUTHOR_EMAIL || secrets.GRAPH_AUTHOR_EMAIL }}
+          EVENT_NAME: ${{ github.event_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BEFORE=$(git rev-parse HEAD)
+          chmod +x scripts/graph-backfill.sh
+          # Authenticate remote for pushes from the script
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          if [ -n "${{ inputs.range_start }}" ]; then
+            START='${{ inputs.range_start }}'
+          elif [ "$EVENT_NAME" = "schedule" ]; then
+            START=$(date -u +%F)
+          else
+            START=$(date -u -d '7 days ago' +%F)
+          fi
+          if [ -n "${{ inputs.range_end }}" ]; then
+            END='${{ inputs.range_end }}'
+          elif [ "$EVENT_NAME" = "schedule" ]; then
+            END=$(date -u +%F)
+          else
+            END=$(date -u -d 'yesterday' +%F)
+          fi
+          # Use a directory that won't collide with legacy .graph-seed file
+          SEED_FILE=".graph-seed.d/${{ github.run_id }}.txt"
+          ARGS=("./scripts/graph-backfill.sh" --start "$START" --end "$END" --min "$MIN" --max "$MAX" --file "$SEED_FILE" --enable-push)
+          [ -n "$AUTHOR_NAME" ] && ARGS+=(--author-name "$AUTHOR_NAME")
+          [ -n "$AUTHOR_EMAIL" ] && ARGS+=(--author-email "$AUTHOR_EMAIL")
+          bash "${ARGS[@]}"
+          AFTER=$(git rev-parse HEAD)
+          echo "before=$BEFORE" >> $GITHUB_OUTPUT
+          echo "after=$AFTER" >> $GITHUB_OUTPUT
+        id: backfill
+
+      - name: Pull latest and push to default branch
+        if: steps.backfill.outputs.before != steps.backfill.outputs.after
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE: ${{ github.event.repository.default_branch }}
+        run: |
+          # Authenticate with PAT and update default branch safely
+          set -euo pipefail
+          # Use the workflow GITHUB_TOKEN for HTTPS auth
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
+          git fetch origin "$BASE"
+          git checkout "$BASE"
+          
+          max_attempts=100
+          attempt=1
+          while [ "$attempt" -le "$max_attempts" ]; do
+            echo "Attempt ${attempt}/${max_attempts}: pushing to ${BASE}"
+            if git push origin "HEAD:${BASE}"; then
+              echo "Push succeeded"
+              break
+            fi
+            echo "Push failed; merging origin/${BASE} and retrying..."
+            # Merge latest with union/ours to auto-stack .graph-seed appends
+            if ! git fetch origin "$BASE"; then
+              echo "Fetch failed; will retry after backoff"
+            else
+              # ensure attributes are respected
+              git config --local merge.renamelimit 999999 || true
+              if ! git merge -s recursive -X ours --no-edit "origin/${BASE}"; then
+                echo "Merge failed; attempting to abort and retry"
+                git merge --abort || true
+              fi
+            fi
+            attempt=$((attempt + 1))
+            sleep $(( attempt * 3 ))
+          done
+          if [ "$attempt" -gt "$max_attempts" ]; then
+            echo "Push failed after ${max_attempts} attempts" >&2
+            exit 1
+          fi
