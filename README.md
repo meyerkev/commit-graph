@@ -52,6 +52,11 @@ Push retry controls:
 --push-retries 7 --push-backoff 3   # up to 7 attempts with exponential backoff starting at 3s
 ```
 
+Retry behavior details:
+- On a push failure, the script fetches `origin/<branch>` and attempts a merge using `-X ours` to prefer local changes (safe for append-only `.graph-seed`).
+- After merge (or if fetch/merge fails), it retries with exponential backoff until `--push-retries` is exhausted.
+- The workflow still contains a final safety push; with `--enable-push`, that step is usually a no-op fast-forward.
+
 ## GitHub Action
 
 - Add repo variables: `GRAPH_AUTHOR_NAME`, `GRAPH_AUTHOR_EMAIL` (must match a verified email).
