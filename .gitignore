@@ -201,6 +201,9 @@ cython_debug/
 
 # Local scratch and temp
 tmp/
+
+# Node
+node_modules/
 .cursorignore
 .cursorindexingignore
 
