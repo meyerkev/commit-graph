@@ -61,7 +61,8 @@ jobs:
           else
             END=$(date -u -d 'yesterday' +%F)
           fi
-          SEED_FILE=".graph-seed/${{ github.run_id }}.txt"
+          # Use a directory that won't collide with legacy .graph-seed file
+          SEED_FILE=".graph-seed.d/${{ github.run_id }}.txt"
           ARGS=("./scripts/graph-backfill.sh" --start "$START" --end "$END" --min "$MIN" --max "$MAX" --file "$SEED_FILE")
           [ -n "$AUTHOR_NAME" ] && ARGS+=(--author-name "$AUTHOR_NAME")
           [ -n "$AUTHOR_EMAIL" ] && ARGS+=(--author-email "$AUTHOR_EMAIL")
