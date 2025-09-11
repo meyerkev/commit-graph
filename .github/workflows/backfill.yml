@@ -73,15 +73,16 @@ jobs:
       - name: Pull latest and push to default branch
         if: steps.backfill.outputs.before != steps.backfill.outputs.after
         env:
-          PAT: ${{ secrets.GRAPH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BASE: ${{ github.event.repository.default_branch }}
         run: |
           # Authenticate with PAT and update default branch safely
           set -euo pipefail
-          git remote set-url origin "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git"
+          # Use the workflow GITHUB_TOKEN for HTTPS auth
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           git fetch origin "$BASE"
           git checkout "$BASE"
-
+          
           max_attempts=100
           attempt=1
           while [ "$attempt" -le "$max_attempts" ]; do
