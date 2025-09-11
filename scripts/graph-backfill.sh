@@ -179,20 +179,49 @@ make_commit_at() {
     git commit -m "$msg"
 }
 
-# Remove the seed file and commit its removal
-# Respects DRY_RUN mode and only removes if file exists
+# Track which files we've already removed to avoid duplicate removals
+declare -A REMOVED_FILES
+
+# Remove the seed file/directory and commit its removal
+# Respects DRY_RUN mode and only removes if file/directory exists
 remove_seed_file() {
   if [ "$DRY_RUN" -eq 1 ]; then
-    log "DRY: Would remove $SEED_FILE"
+    log "DRY: Would remove $SEED_FILE and $SEED_FILE.d/"
     log "DRY: Would commit removal"
     return 0
   fi
   
-  if [ -f "$SEED_FILE" ]; then
+  local has_changes=0
+  
+  # Remove single file if it exists and hasn't been removed yet
+  if [ -f "$SEED_FILE" ] && [ -z "${REMOVED_FILES[$SEED_FILE]:-}" ]; then
     log "Removing $SEED_FILE"
-    git rm -f "$SEED_FILE"
-    git commit -m "chore(cleanup): remove graph seed file"
-    log "Successfully removed and committed $SEED_FILE"
+    git rm -f "$SEED_FILE" || true
+    REMOVED_FILES[$SEED_FILE]=1
+    has_changes=1
+  fi
+  
+  # Handle directory contents
+  if [ -d "$SEED_FILE.d" ]; then
+    local file
+    while IFS= read -r -d '' file; do
+      # Skip if we've already removed this file
+      [ -n "${REMOVED_FILES[$file]:-}" ] && continue
+      
+      log "Removing $file"
+      git rm -f "$file" || true
+      REMOVED_FILES[$file]=1
+      has_changes=1
+    done < <(find "$SEED_FILE.d" -type f -print0)
+    
+    # Try to remove the directory if it's empty
+    rmdir "$SEED_FILE.d" 2>/dev/null || true
+  fi
+  
+  # Only commit if we actually removed something
+  if [ "$has_changes" -eq 1 ]; then
+    git commit -m "chore(cleanup): remove graph seed files"
+    log "Successfully removed and committed seed files"
   fi
   ensure_seed_file
 }
