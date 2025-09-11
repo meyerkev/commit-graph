@@ -259,6 +259,7 @@ checkpoint_if_needed() {
 
     log "Checkpoint #$BATCH_INDEX: pushing $curr -> $push_ref on $REMOTE"
     remove_seed_file
+    ensure_seed_file
     
     if git_push_with_retry "$REMOTE" "$curr" "$push_ref"; then
       if [ "$ROTATE" -eq 1 ] && [ "$DRY_RUN" -eq 0 ]; then
@@ -302,6 +303,7 @@ fi
 
 current_day="$START_DATE"
 while :; do
+  ensure_seed_file
   [ "$current_day" \> "$END_DATE" ] && break
   existing=$(count_commits_for_day "$current_day") || existing=0
   target=$(rand_inclusive "$MIN_COMMITS" "$MAX_COMMITS")
