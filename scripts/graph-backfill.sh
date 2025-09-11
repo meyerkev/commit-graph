@@ -137,6 +137,7 @@ count_commits_for_day() {
 }
 
 ensure_seed_file() {
+  mkdir -p "$(dirname "$SEED_FILE")"
   [ -f "$SEED_FILE" ] || echo "# seed" > "$SEED_FILE"
 }
 
