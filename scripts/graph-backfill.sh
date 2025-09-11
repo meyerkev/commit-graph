@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+set -xx
+
 # Graph backfill: create N random commits per day within a date range.
 # Defaults: start=2023-01-01, end=today, min=15, max=100.
 
@@ -205,7 +207,6 @@ remove_seed_file() {
   # Handle directory contents
   if [ -d "$SEED_DIR" ]; then
     git rm -rf "$SEED_DIR" || true
-    has_changes=1
   fi
   
   # Only commit if we actually removed something
