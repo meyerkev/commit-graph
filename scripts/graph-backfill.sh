@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-set -x 
-
 # Graph backfill: create N random commits per day within a date range.
 # Defaults: start=2023-01-01, end=today, min=15, max=100.
 
