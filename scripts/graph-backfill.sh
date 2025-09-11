@@ -194,6 +194,7 @@ remove_seed_file() {
     git commit -m "chore(cleanup): remove graph seed file"
     log "Successfully removed and committed $SEED_FILE"
   fi
+  ensure_seed_file
 }
 
 # Batching helpers
@@ -259,7 +260,6 @@ checkpoint_if_needed() {
 
     log "Checkpoint #$BATCH_INDEX: pushing $curr -> $push_ref on $REMOTE"
     remove_seed_file
-    ensure_seed_file
     
     if git_push_with_retry "$REMOTE" "$curr" "$push_ref"; then
       if [ "$ROTATE" -eq 1 ] && [ "$DRY_RUN" -eq 0 ]; then
