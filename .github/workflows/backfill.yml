@@ -49,9 +49,12 @@ jobs:
           AUTHOR_NAME: ${{ vars.GRAPH_AUTHOR_NAME || secrets.GRAPH_AUTHOR_NAME }}
           AUTHOR_EMAIL: ${{ vars.GRAPH_AUTHOR_EMAIL || secrets.GRAPH_AUTHOR_EMAIL }}
           EVENT_NAME: ${{ github.event_name }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BEFORE=$(git rev-parse HEAD)
           chmod +x scripts/graph-backfill.sh
+          # Authenticate remote for pushes from the script
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}.git"
           if [ -n "${{ inputs.range_start }}" ]; then
             START='${{ inputs.range_start }}'
           elif [ "$EVENT_NAME" = "schedule" ]; then
@@ -68,7 +71,7 @@ jobs:
           fi
           # Use a directory that won't collide with legacy .graph-seed file
           SEED_FILE=".graph-seed.d/${{ github.run_id }}.txt"
-          ARGS=("./scripts/graph-backfill.sh" --start "$START" --end "$END" --min "$MIN" --max "$MAX" --file "$SEED_FILE")
+          ARGS=("./scripts/graph-backfill.sh" --start "$START" --end "$END" --min "$MIN" --max "$MAX" --file "$SEED_FILE" --enable-push)
           [ -n "$AUTHOR_NAME" ] && ARGS+=(--author-name "$AUTHOR_NAME")
           [ -n "$AUTHOR_EMAIL" ] && ARGS+=(--author-email "$AUTHOR_EMAIL")
           bash "${ARGS[@]}"
