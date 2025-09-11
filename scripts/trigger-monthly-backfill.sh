@@ -95,6 +95,9 @@ last_day_of_month() {
 }
 
 [ -n "$TO_YEAR" ] || TO_YEAR=$(current_year)
+CY=$($DATE_BIN -u +%Y)
+CM=$($DATE_BIN -u +%m)
+TODAY=$($DATE_BIN -u +%F)
 
 if [ -z "$REPO" ]; then
   # Try to derive from git origin url
@@ -136,8 +139,20 @@ dispatch() {
 
 for y in $(seq "$FROM_YEAR" "$TO_YEAR"); do
   for m in $(seq 1 12); do
+    # Skip future months in the current year
+    if [ "$y" -gt "$CY" ]; then continue; fi
+    if [ "$y" -eq "$CY" ] && [ "$m" -gt "$CM" ]; then
+      log "Skip future month: ${y}-$(printf %02d "$m")"
+      continue
+    fi
     start=$(first_day_of_month "$y" "$m")
     end=$(last_day_of_month "$y" "$m")
+    # Cap current month to today (no prefill beyond current date)
+    if [ "$y" -eq "$CY" ] && [ "$m" -eq "$CM" ]; then
+      if [ "$end" \> "$TODAY" ]; then
+        end="$TODAY"
+      fi
+    fi
     log "Queue: $start .. $end"
     dispatch "$start" "$end" || {
       echo "Warning: dispatch failed for $start..$end" >&2
