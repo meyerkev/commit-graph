@@ -65,22 +65,8 @@ api() {
   fi
 }
 
-# Resolve workflow to ID if a file name was provided
 WORKFLOW_ID="$WORKFLOW"
-if ! [[ "$WORKFLOW" =~ ^[0-9]+$ ]]; then
-  # List workflows and find ID by file name/path
-  wf_json=$(api GET "https://api.github.com/repos/${REPO}/actions/workflows")
-  WORKFLOW_ID=$(node -e '
-    let d="";process.stdin.on("data",c=>d+=c);process.stdin.on("end",()=>{
-      try{const j=JSON.parse(d);const w=j.workflows||[];const t=(process.argv[1]||"").toLowerCase();
-        const hit=w.find(x=>String(x.path||"").toLowerCase().endsWith(t)||String(x.name||"").toLowerCase()===t);
-        if(hit&&hit.id)process.stdout.write(String(hit.id));}catch(e){}
-    });
-  ' "$WORKFLOW")
-  [ -n "$WORKFLOW_ID" ] || die "Could not resolve workflow ID for '$WORKFLOW'"
-fi
-
-log "Workflow ${WORKFLOW} -> ID ${WORKFLOW_ID}"
+log "Target workflow identifier: ${WORKFLOW_ID}"
 
 IFS=',' read -r -a status_arr <<< "$STATUSES"
 to_cancel=()
@@ -117,4 +103,3 @@ printf "%s\n" "$unique_ids" | while read -r id; do
 done
 
 log "Done."
-
