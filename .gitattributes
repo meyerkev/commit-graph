@@ -1,1 +1,2 @@
 .graph-seed merge=union
+.graph-seed/** merge=union
