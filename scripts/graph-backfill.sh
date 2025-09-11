@@ -355,6 +355,11 @@ while :; do
   current_day=$(date_add_days "$current_day" 1)
 done
 
+echo "Cleaning up seed files"
+git rm -rf "$SEED_FILE.d"
+git commit -a -m "chore(cleanup): remove graph seed files"
+git_push_with_retry "$REMOTE" "$(current_branch_name)" "$(current_branch_name)"
+
 log "Done."
 
 final_checkpoint_if_needed
