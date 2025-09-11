@@ -32,14 +32,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # Work directly on the default branch
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
           persist-credentials: false
-
-      - name: Create side branch
-        id: side_branch
-        run: |
-          BRANCH="graph-backfill/${{ github.run_id }}"
-          git checkout -b "$BRANCH"
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
 
       - name: Configure Git
         run: |
@@ -74,29 +70,40 @@ jobs:
           echo "after=$AFTER" >> $GITHUB_OUTPUT
         id: backfill
 
-      - name: Push changes to side branch
+      - name: Pull latest and push to default branch
         if: steps.backfill.outputs.before != steps.backfill.outputs.after
         env:
           PAT: ${{ secrets.GRAPH_PAT }}
-          BRANCH: ${{ steps.side_branch.outputs.branch }}
-        run: |
-          git remote set-url origin "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git"
-          git push origin "HEAD:${BRANCH}"
-
-      - name: Open PR to default branch
-        if: steps.backfill.outputs.before != steps.backfill.outputs.after
-        env:
-          PAT: ${{ secrets.GRAPH_PAT }}
-          REPO: ${{ github.repository }}
           BASE: ${{ github.event.repository.default_branch }}
-          HEAD: ${{ steps.side_branch.outputs.branch }}
         run: |
-          API="https://api.github.com/repos/${REPO}/pulls"
-          TITLE="Backfill: last 7 days (${HEAD})"
-          BODY=$'Automated backfill for the last 7 days.\n\nThis PR was created by the scheduled workflow to keep contributions topped up.'
-          curl -sS -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${PAT}" \
-            "$API" \
-            -d "{\"title\":\"${TITLE}\",\"body\":\"${BODY}\",\"head\":\"${HEAD}\",\"base\":\"${BASE}\"}" \
-            >/dev/null || true
+          # Authenticate with PAT and update default branch safely
+          set -euo pipefail
+          git remote set-url origin "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git"
+          git fetch origin "$BASE"
+          git checkout "$BASE"
+
+          max_attempts=100
+          attempt=1
+          while [ "$attempt" -le "$max_attempts" ]; do
+            echo "Attempt ${attempt}/${max_attempts}: pushing to ${BASE}"
+            if git push origin "HEAD:${BASE}"; then
+              echo "Push succeeded"
+              break
+            fi
+            echo "Push failed; rebasing onto origin/${BASE} and retrying..."
+            # Try to rebase on latest and retry
+            if ! git fetch origin "$BASE"; then
+              echo "Fetch failed; will retry after backoff"
+            else
+              if ! git pull --rebase origin "$BASE"; then
+                echo "Rebase failed; attempting to abort and retry"
+                git rebase --abort || true
+              fi
+            fi
+            attempt=$((attempt + 1))
+            sleep $(( attempt * 3 ))
+          done
+          if [ "$attempt" -gt "$max_attempts" ]; then
+            echo "Push failed after ${max_attempts} attempts" >&2
+            exit 1
+          fi
