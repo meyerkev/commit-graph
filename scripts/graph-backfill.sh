@@ -14,6 +14,16 @@ SEED_FILE=".graph-seed"
 DRY_RUN=0
 QUIET=0
 
+# Optional batching/push/rotate settings
+REMOTE="origin"
+PUSH_BRANCH=""      # default: push to current branch
+BATCH_SIZE=1000      # default: checkpoint every 1000 commits (set 0 to disable)
+ROTATE=0             # default: do not create/switch to new branch at checkpoints
+BRANCH_PREFIX="batch"
+ENABLE_PUSH=0        # require explicit opt-in to push
+PUSH_RETRIES=5       # retry count for git push
+PUSH_BACKOFF_SEC=2   # initial backoff seconds; doubles each retry
+
 log() { [ "$QUIET" -eq 1 ] && return 0; printf "%s\n" "$*"; }
 die() { printf "Error: %s\n" "$*" >&2; exit 1; }
 
@@ -43,6 +53,14 @@ Options:
   --file PATH              File to modify for commits (default: .graph-seed)
   --dry-run                Show actions without committing
   --quiet                  Reduce output
+  --batch-size N           Every N commits, perform a checkpoint (default: 1000; use 0 to disable)
+  --remote NAME            Remote name to push to (default: origin)
+  --push-branch NAME       Remote branch to update (default: current branch name)
+  --rotate                 After pushing at a checkpoint, create and switch to a new branch
+  --branch-prefix PREFIX   Prefix for rotated branch names (default: batch)
+  --enable-push            Actually run git push at checkpoints (default: print only)
+  --push-retries N         Number of times to retry failed pushes (default: 5)
+  --push-backoff SEC       Initial backoff delay in seconds (default: 2; doubles each retry)
   -h, --help               Show this help
 
 Examples:
@@ -63,6 +81,14 @@ while [ $# -gt 0 ]; do
     --file) SEED_FILE=${2:?}; shift 2;;
     --dry-run) DRY_RUN=1; shift;;
     --quiet) QUIET=1; shift;;
+    --batch-size) BATCH_SIZE=${2:?}; shift 2;;
+    --remote) REMOTE=${2:?}; shift 2;;
+    --push-branch) PUSH_BRANCH=${2:?}; shift 2;;
+    --rotate) ROTATE=1; shift;;
+    --branch-prefix) BRANCH_PREFIX=${2:?}; shift 2;;
+    --enable-push) ENABLE_PUSH=1; shift;;
+    --push-retries) PUSH_RETRIES=${2:?}; shift 2;;
+    --push-backoff) PUSH_BACKOFF_SEC=${2:?}; shift 2;;
     -h|--help) usage; exit 0;;
     *) die "Unknown option: $1";;
   esac
@@ -153,6 +179,67 @@ make_commit_at() {
     git commit -m "$msg"
 }
 
+# Batching helpers
+current_branch_name() { git rev-parse --abbrev-ref HEAD; }
+
+BATCH_INDEX=0
+MADE_TOTAL=0
+
+git_push_with_retry() {
+  local remote=$1 curr=$2 push_ref=$3
+  if [ "$DRY_RUN" -eq 1 ] || [ "$ENABLE_PUSH" -eq 0 ]; then
+    [ "$ENABLE_PUSH" -eq 1 ] || log "INFO: push disabled. Use --enable-push to actually push."
+    log "DRY: would push $curr -> $push_ref on $remote"
+    return 0
+  fi
+  local attempt=1 delay=$PUSH_BACKOFF_SEC rc=0
+  while :; do
+    if git push "$remote" "$curr":"$push_ref"; then
+      return 0
+    fi
+    rc=$?
+    if [ "$attempt" -ge "$PUSH_RETRIES" ]; then
+      log "WARN: push failed after $attempt attempts (rc=$rc)"
+      return "$rc"
+    fi
+    log "WARN: push failed (attempt $attempt/$PUSH_RETRIES); retrying in ${delay}s..."
+    sleep "$delay"
+    attempt=$(( attempt + 1 ))
+    delay=$(( delay * 2 ))
+  done
+}
+
+checkpoint_if_needed() {
+  # Only when batching enabled and at exact multiples
+  if [ "$BATCH_SIZE" -gt 0 ] && [ $(( MADE_TOTAL % BATCH_SIZE )) -eq 0 ] && [ "$MADE_TOTAL" -ne 0 ]; then
+    BATCH_INDEX=$(( BATCH_INDEX + 1 ))
+    local curr push_ref new_branch ts
+    curr=$(current_branch_name)
+    push_ref=${PUSH_BRANCH:-$curr}
+    ts=$(if is_gnu_date; then $DATE_BIN -u +%Y%m%d-%H%M%S; else $DATE_BIN -u +%Y%m%d-%H%M%S; fi)
+    new_branch="${BRANCH_PREFIX}-${ts}-${BATCH_INDEX}"
+
+    if [ "$DRY_RUN" -eq 1 ] || [ "$ENABLE_PUSH" -eq 0 ]; then
+      [ "$ENABLE_PUSH" -eq 1 ] || log "INFO: push disabled. Use --enable-push to actually push."
+      log "DRY: checkpoint #$BATCH_INDEX — would push $curr -> $push_ref on $REMOTE"
+      if [ "$ROTATE" -eq 1 ]; then
+        log "DRY: would create and switch to new branch: $new_branch"
+      fi
+      return 0
+    fi
+
+    log "Checkpoint #$BATCH_INDEX: pushing $curr -> $push_ref on $REMOTE"
+    if git_push_with_retry "$REMOTE" "$curr" "$push_ref"; then
+      if [ "$ROTATE" -eq 1 ] && [ "$DRY_RUN" -eq 0 ]; then
+        log "Rotating branch: $new_branch"
+        git checkout -b "$new_branch"
+      fi
+    else
+      log "WARN: checkpoint push failed; skipping rotation"
+    fi
+  fi
+}
+
 log "Backfilling from $START_DATE to $END_DATE (min=$MIN_COMMITS, max=$MAX_COMMITS)"
 ensure_seed_file
 
@@ -180,9 +267,27 @@ while :; do
       ts_epoch=$(( base_epoch + offset ))
       ts_iso=$(fmt_iso_utc_from_epoch "$ts_epoch")
       make_commit_at "$ts_iso" "chore(graph): seed $current_day (#$i/$need)"
+      MADE_TOTAL=$(( MADE_TOTAL + 1 ))
+      checkpoint_if_needed
     done
   fi
   current_day=$(date_add_days "$current_day" 1)
 done
 
 log "Done."
+
+# Final push for remaining commits under the batch size threshold
+if [ "$BATCH_SIZE" -gt 0 ] && [ "$MADE_TOTAL" -gt 0 ] && [ $(( MADE_TOTAL % BATCH_SIZE )) -ne 0 ]; then
+  local curr push_ref
+  curr=$(current_branch_name)
+  push_ref=${PUSH_BRANCH:-$curr}
+  if [ "$DRY_RUN" -eq 1 ] || [ "$ENABLE_PUSH" -eq 0 ]; then
+    [ "$ENABLE_PUSH" -eq 1 ] || log "INFO: push disabled. Use --enable-push to actually push."
+    log "DRY: final checkpoint — would push $curr -> $push_ref on $REMOTE"
+  else
+    log "Final checkpoint: pushing $curr -> $push_ref on $REMOTE"
+    if ! git_push_with_retry "$REMOTE" "$curr" "$push_ref"; then
+      log "WARN: final push failed"
+    fi
+  fi
+fi
