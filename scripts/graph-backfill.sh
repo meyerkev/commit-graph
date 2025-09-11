@@ -205,13 +205,15 @@ remove_seed_file() {
   fi
   
   # Handle directory contents
-  if [ -d "$SEED_DIR" ]; then
+  # Only remove seed directory if it contains files
+  if [ -d "$SEED_DIR" ] && [ -n "$(ls -A "$SEED_DIR" 2>/dev/null)" ]; then
     git rm -rf "$SEED_DIR" || true
+    has_changes=1
   fi
   
   # Only commit if we actually removed something
   if [ "$has_changes" -eq 1 ]; then
-    git commit -m "chore(cleanup): remove graph seed files"
+    git commit -m "chore(cleanup): remove graph seed files"  || true
     log "Successfully removed and committed seed files"
   fi
   ensure_seed_file
