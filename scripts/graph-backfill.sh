@@ -345,10 +345,13 @@ while :; do
   current_day=$(date_add_days "$current_day" 1)
 done
 
-echo "Cleaning up seed files"
-(git add "$SEED_DIR" && git rm -rf "$SEED_DIR") || true
-git commit -a -m "chore(cleanup): remove graph seed files"
-git_push_with_retry "$REMOTE" "$(current_branch_name)" "$(current_branch_name)"
+# Final cleanup is handled by the workflow's push step
+# We only need to ensure the seed files are staged for removal
+if [ -d "$SEED_DIR" ] || [ -f "$SEED_FILE" ]; then
+  log "Staging seed files for removal"
+  git add "$SEED_DIR" "$SEED_FILE" 2>/dev/null || true
+  git rm -rf "$SEED_DIR" "$SEED_FILE" 2>/dev/null || true
+fi
 
 log "Done."
 
