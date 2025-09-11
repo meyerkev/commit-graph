@@ -73,13 +73,25 @@ is_gnu_date() { $DATE_BIN --version >/dev/null 2>&1; }
 current_year() { $DATE_BIN -u +%Y; }
 fmt_y_m_d() { if is_gnu_date; then $DATE_BIN -u -d "$1" +%F; else $DATE_BIN -u -j -f "%Y-%m-%d" "$1" +%Y-%m-%d; fi; }
 first_day_of_month() { printf "%04d-%02d-01\n" "$1" "$2"; }
-last_day_of_month() {
-  local y=$1 m=$2
+date_add_days() {
+  local d=$1; local days=$2
   if is_gnu_date; then
-    $DATE_BIN -u -d "${y}-${m}-01 +1 month -1 day" +%F
+    $DATE_BIN -u -d "$d $days day" +%F
   else
-    $DATE_BIN -u -j -f "%Y-%m-%d" "${y}-$(printf %02d "$m")-01" -v+1m -v-1d +%Y-%m-%d
+    $DATE_BIN -u -j -f "%Y-%m-%d" "$d" -v${days}d +%Y-%m-%d
   fi
+}
+
+is_leap() { local y=$1; ( [ $((y % 400)) -eq 0 ] || { [ $((y % 4)) -eq 0 ] && [ $((y % 100)) -ne 0 ]; } ) && return 0 || return 1; }
+last_day_of_month() {
+  local y=$1 m=$2 d=31
+  case $m in
+    1|3|5|7|8|10|12) d=31 ;;
+    4|6|9|11) d=30 ;;
+    2) if is_leap "$y"; then d=29; else d=28; fi ;;
+    *) d=31 ;;
+  esac
+  printf "%04d-%02d-%02d\n" "$y" "$m" "$d"
 }
 
 [ -n "$TO_YEAR" ] || TO_YEAR=$(current_year)
@@ -136,4 +148,3 @@ for y in $(seq "$FROM_YEAR" "$TO_YEAR"); do
 done
 
 log "Done."
-
