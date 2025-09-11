@@ -34,6 +34,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Create side branch
+        id: side_branch
+        run: |
+          BRANCH="graph-backfill/${{ github.run_id }}"
+          git checkout -b "$BRANCH"
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+
       - name: Configure Git
         run: |
           git config user.name "${{ vars.GRAPH_AUTHOR_NAME }}"
@@ -43,8 +50,8 @@ jobs:
         env:
           MIN: ${{ inputs.min || vars.GRAPH_MIN || '15' }}
           MAX: ${{ inputs.max || vars.GRAPH_MAX || '100' }}
-          AUTHOR_NAME: ${{ vars.GRAPH_AUTHOR_NAME }}
-          AUTHOR_EMAIL: ${{ vars.GRAPH_AUTHOR_EMAIL }}
+          AUTHOR_NAME: ${{ vars.GRAPH_AUTHOR_NAME || secrets.GRAPH_AUTHOR_NAME }}
+          AUTHOR_EMAIL: ${{ vars.GRAPH_AUTHOR_EMAIL || secrets.GRAPH_AUTHOR_EMAIL }}
         run: |
           BEFORE=$(git rev-parse HEAD)
           chmod +x scripts/graph-backfill.sh
@@ -67,11 +74,29 @@ jobs:
           echo "after=$AFTER" >> $GITHUB_OUTPUT
         id: backfill
 
-      - name: Push changes
+      - name: Push changes to side branch
         if: steps.backfill.outputs.before != steps.backfill.outputs.after
         env:
           PAT: ${{ secrets.GRAPH_PAT }}
-          BRANCH: ${{ github.ref_name }}
+          BRANCH: ${{ steps.side_branch.outputs.branch }}
         run: |
           git remote set-url origin "https://x-access-token:${PAT}@github.com/${{ github.repository }}.git"
           git push origin "HEAD:${BRANCH}"
+
+      - name: Open PR to default branch
+        if: steps.backfill.outputs.before != steps.backfill.outputs.after
+        env:
+          PAT: ${{ secrets.GRAPH_PAT }}
+          REPO: ${{ github.repository }}
+          BASE: ${{ github.event.repository.default_branch }}
+          HEAD: ${{ steps.side_branch.outputs.branch }}
+        run: |
+          API="https://api.github.com/repos/${REPO}/pulls"
+          TITLE="Backfill: last 7 days (${HEAD})"
+          BODY=$'Automated backfill for the last 7 days.\n\nThis PR was created by the scheduled workflow to keep contributions topped up.'
+          curl -sS -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${PAT}" \
+            "$API" \
+            -d "{\"title\":\"${TITLE}\",\"body\":\"${BODY}\",\"head\":\"${HEAD}\",\"base\":\"${BASE}\"}" \
+            >/dev/null || true
