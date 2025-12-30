@@ -1,5 +1,5 @@
 # commit-graph
-Make a bunch of commits so my GitHub graph looks good.
+Make a bunch of commits so my GitHub graph looks good to HR so that I can be allowed to talk to the person reading this.
 
 ## Usage
 
